@@ -58,7 +58,7 @@ M.defaults = {
     max_tokens = 4096,
     ["local"] = false,
   },
-  ---@type AvanteGeminiProvider
+  ---@type AvanteSupportedProvider
   cohere = {
     endpoint = "https://api.cohere.com/v1",
     model = "command-r-plus",
@@ -78,6 +78,9 @@ M.defaults = {
   behaviour = {
     auto_set_highlight_group = true,
     auto_apply_diff_after_generation = false,
+  },
+  history = {
+    storage_path = vim.fn.stdpath("state") .. "/avante",
   },
   highlights = {
     ---@type AvanteConflictHighlights
@@ -107,6 +110,10 @@ M.defaults = {
       normal = "<CR>",
       insert = "<C-s>",
     },
+    toggle = {
+      debug = "<leader>ad",
+      hint = "<leader>ah",
+    },
   },
   windows = {
     wrap = true, -- similar to vim.o.wrap
@@ -118,7 +125,6 @@ M.defaults = {
   },
   --- @class AvanteConflictUserConfig
   diff = {
-    debug = false,
     autojump = true,
     ---@type string | fun(): any
     list_opener = "copen",

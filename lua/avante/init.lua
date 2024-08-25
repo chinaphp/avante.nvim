@@ -43,6 +43,25 @@ end
 H.keymaps = function()
   vim.keymap.set({ "n", "v" }, Config.mappings.ask, M.toggle, { noremap = true })
   vim.keymap.set("n", Config.mappings.refresh, M.refresh, { noremap = true })
+
+  Utils.toggle_map("n", Config.mappings.toggle.debug, {
+    name = "debug",
+    get = function()
+      return Config.debug
+    end,
+    set = function(state)
+      Config.override({ debug = state })
+    end,
+  })
+  Utils.toggle_map("n", Config.mappings.toggle.hint, {
+    name = "hint",
+    get = function()
+      return Config.hints.enabled
+    end,
+    set = function(state)
+      Config.override({ hints = { enabled = state } })
+    end,
+  })
 end
 
 H.autocmds = function()
@@ -206,6 +225,7 @@ function M.setup(opts)
     return
   end
 
+  require("avante.history").setup()
   require("avante.highlights").setup()
   require("avante.diff").setup()
   require("avante.providers").setup()

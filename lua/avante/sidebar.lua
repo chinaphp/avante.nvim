@@ -1,10 +1,10 @@
 local api = vim.api
 local fn = vim.fn
 
-local Path = require("plenary.path")
 local Split = require("nui.split")
 local event = require("nui.utils.autocmd").event
 
+local History = require("avante.history")
 local Config = require("avante.config")
 local Diff = require("avante.diff")
 local Llm = require("avante.llm")
@@ -413,8 +413,18 @@ function Sidebar:render_input_container()
   end
 
   local filetype = api.nvim_get_option_value("filetype", { buf = self.code.bufnr })
+
+  ---@type string
+  local icon
+  ---@diagnostic disable-next-line: undefined-field
+  if _G.MiniIcons ~= nil then
+    ---@diagnostic disable-next-line: undefined-global
+    icon, _, _ = MiniIcons.get("filetype", filetype)
+  else
+    icon = require("nvim-web-devicons").get_icon_by_filetype(filetype, {})
+  end
+
   local code_file_fullpath = api.nvim_buf_get_name(self.code.bufnr)
-  local icon = require("nvim-web-devicons").get_icon_by_filetype(filetype, {})
   local code_filename = fn.fnamemodify(code_file_fullpath, ":t")
   local header_text = string.format("󱜸 Chat with %s %s (<Tab>: switch focus)", icon, code_filename)
 
@@ -484,7 +494,7 @@ function Sidebar:on_mount()
 
     current_apply_extmark_id =
       api.nvim_buf_set_extmark(self.result.bufnr, CODEBLOCK_KEYBINDING_NAMESPACE, block.start_line, -1, {
-        virt_text = { { " [Press <A> to Apply these patches] ", "Keyword" } },
+        virt_text = { { " [<A>: apply patch] ", "Keyword" } },
         virt_text_pos = "right_align",
         hl_group = "Keyword",
         priority = PRIORITY,
@@ -619,6 +629,7 @@ function Sidebar:on_mount()
     group = self.augroup,
     buffer = self.result.bufnr,
     callback = function()
+      self:focus()
       if self.input and self.input.winid and api.nvim_win_is_valid(self.input.winid) then
         api.nvim_set_current_win(self.input.winid)
       end
@@ -916,32 +927,6 @@ local function prepend_line_number(content, start_line)
   return table.concat(result, "\n")
 end
 
--- Function to get the current project root directory
-local function get_project_root()
-  local current_file = fn.expand("%:p")
-  local current_dir = fn.fnamemodify(current_file, ":h")
-  local git_root = vim.fs.root(current_file, { ".git" })
-  return git_root ~= nil and git_root or current_dir
-end
-
----@param sidebar avante.Sidebar
-local function get_chat_history_filename(sidebar)
-  local code_buf_name = api.nvim_buf_get_name(sidebar.code.bufnr)
-  local relative_path = fn.fnamemodify(code_buf_name, ":~:.")
-  -- Replace path separators with double underscores
-  local path_with_separators = fn.substitute(relative_path, "/", "__", "g")
-  -- Replace other non-alphanumeric characters with single underscores
-  return fn.substitute(path_with_separators, "[^A-Za-z0-9._]", "_", "g")
-end
-
--- Function to get the chat history file path
-local function get_chat_history_file(sidebar)
-  local project_root = get_project_root()
-  local filename = get_chat_history_filename(sidebar)
-  local history_dir = Path:new(project_root, ".avante_chat_history")
-  return history_dir:joinpath(filename .. ".json")
-end
-
 -- Function to get current timestamp
 local function get_timestamp()
   return os.date("%Y-%m-%d %H:%M:%S")
@@ -960,29 +945,6 @@ local function get_chat_record_prefix(timestamp, provider, model, request)
     .. "\n\n> "
     .. request:gsub("\n", "\n> ")
     .. "\n\n"
-end
-
--- Function to load chat history
-local function load_chat_history(sidebar)
-  local history_file = get_chat_history_file(sidebar)
-  if history_file:exists() then
-    local content = history_file:read()
-    return fn.json_decode(content)
-  end
-  return {}
-end
-
--- Function to save chat history
-local function save_chat_history(sidebar, history)
-  local history_file = get_chat_history_file(sidebar)
-  local history_dir = history_file:parent()
-
-  -- Create the directory if it doesn't exist
-  if not history_dir:exists() then
-    history_dir:mkdir({ parents = true })
-  end
-
-  history_file:write(fn.json_encode(history), "w")
 end
 
 function Sidebar:update_content_with_history(history)
@@ -1034,75 +996,73 @@ function Sidebar:get_content_between_separators()
   return content
 end
 
+---@alias AvanteSlashCommands "clear" | "help" | "lines"
+---@alias AvanteSlashCallback fun(args: string, cb?: fun(args: string): nil): nil
+---@alias AvanteSlash {description: string, command: AvanteSlashCommands, details: string, shorthelp?: string, callback?: AvanteSlashCallback}
+---@return AvanteSlash[]
 function Sidebar:get_commands()
+  ---@param items_ {command: string, description: string, shorthelp?: string}[]
+  ---@return string
   local function get_help_text(items_)
     local help_text = ""
     for _, item in ipairs(items_) do
-      help_text = help_text .. "- " .. item.name .. ": " .. item.description .. "\n"
+      help_text = help_text .. "- " .. item.command .. ": " .. (item.shorthelp or item.description) .. "\n"
     end
     return help_text
   end
 
+  ---@type AvanteSlash[]
   local items = {
-    { name = "help", description = "Show this help message", command = "help" },
-    { name = "clear", description = "Clear chat history", command = "clear" },
-    { name = "lines <start>-<end> <question>", description = "Ask a question about specific lines", command = "lines" },
-  }
-
-  local cbs = {
+    { description = "Show help message", command = "help" },
+    { description = "Clear chat history", command = "clear" },
     {
-      command = "help",
-      ---@diagnostic disable-next-line: unused-local
-      callback = function(args, cb)
-        local help_text = get_help_text(items)
-        self:update_content(help_text, { focus = false, scroll = false })
-        if cb then
-          cb(args)
-        end
-      end,
-    },
-    {
-      command = "clear",
-      ---@diagnostic disable-next-line: unused-local
-      callback = function(args, cb)
-        local chat_history = {}
-        save_chat_history(self, chat_history)
-        self:update_content("Chat history cleared", { focus = false, scroll = false })
-        vim.defer_fn(function()
-          self:close()
-          if cb then
-            cb(args)
-          end
-        end, 1000)
-      end,
-    },
-    {
+      shorthelp = "Ask a question about specific lines",
+      description = "/lines <start>-<end> <question>",
       command = "lines",
-      callback = function(args, cb)
-        if cb then
-          cb(args)
-        end
-      end,
     },
   }
 
-  local commands = {}
-  for _, item in ipairs(items) do
-    table.insert(commands, {
-      name = item.name,
-      command = item.command,
-      description = item.description,
-      callback = function(args, cb)
-        for _, cb_ in ipairs(cbs) do
-          if cb_.command == item.command then
-            cb_.callback(args, cb)
-            break
-          end
+  ---@type {[AvanteSlashCommands]: AvanteSlashCallback}
+  local cbs = {
+    help = function(args, cb)
+      local help_text = get_help_text(items)
+      self:update_content(help_text, { focus = false, scroll = false })
+      if cb then
+        cb(args)
+      end
+    end,
+    clear = function(args, cb)
+      local chat_history = {}
+      History.save(self.code.bufnr, chat_history)
+      self:update_content("Chat history cleared", { focus = false, scroll = false })
+      vim.defer_fn(function()
+        self:close()
+        if cb then
+          cb(args)
         end
-      end,
-    })
-  end
-  return commands
+      end, 1000)
+    end,
+    lines = function(args, cb)
+      if cb then
+        cb(args)
+      end
+    end,
+  }
+
+  return vim
+    .iter(items)
+    :map(
+      ---@param item AvanteSlash
+      function(item)
+        return {
+          command = item.command,
+          description = item.description,
+          callback = cbs[item.command],
+          details = item.shorthelp and table.concat({ item.shorthelp, item.description }, "\n") or item.description,
+        }
+      end
+    )
+    :totable()
 end
 
 function Sidebar:create_selected_code()
@@ -1150,7 +1110,7 @@ function Sidebar:create_input()
     self.input:unmount()
   end
 
-  local chat_history = load_chat_history(self)
+  local chat_history = History.load(self.code.bufnr)
 
   ---@param request string
   local function handle_submit(request)
@@ -1182,13 +1142,13 @@ function Sidebar:create_input()
         return
       end
       local cmds = self:get_commands()
-      local cmd
-      for _, c in ipairs(cmds) do
-        if c.command == command then
-          cmd = c
-          break
-        end
-      end
+      ---@type AvanteSlash
+      local cmd = vim
+        .iter(cmds)
+        :filter(function(_)
+          return _.command == command
+        end)
+        :totable()[1]
       if cmd then
         if command == "lines" then
           cmd.callback(args, function(args_)
@@ -1267,7 +1227,7 @@ function Sidebar:create_input()
         request = request,
         response = full_response,
       })
-      save_chat_history(self, chat_history)
+      History.save(self.code.bufnr, chat_history)
     end
 
     Llm.stream(
@@ -1358,17 +1318,15 @@ function Sidebar:create_input()
   local function show_hint()
     close_hint() -- Close the existing hint window
 
-    local hint_text = "Press " .. Config.mappings.submit.insert .. " to submit"
-    if vim.fn.mode() ~= "i" then
-      hint_text = "Press " .. Config.mappings.submit.normal .. " to submit"
-    end
+    local hint_text = (vim.fn.mode() ~= "i" and Config.mappings.submit.normal or Config.mappings.submit.insert)
+      .. ": submit"
 
     local buf = api.nvim_create_buf(false, true)
     api.nvim_buf_set_lines(buf, 0, -1, false, { hint_text })
 
     -- Get the current window size
     local win_width = api.nvim_win_get_width(self.input.winid)
-    local width = #hint_text + 2
+    local width = #hint_text
 
     -- Set the floating window options
     local opts = {
@@ -1390,11 +1348,8 @@ function Sidebar:create_input()
     api.nvim_win_set_hl_ns(hint_window, Highlights.hint_ns)
   end
 
-  self.input:on(event.InsertEnter, show_hint)
-
-  self.input:on_unmount(function()
-    close_hint()
-  end)
+  self.input:on_mount(show_hint)
+  self.input:on_unmount(close_hint)
 
   -- Show hint in insert mode
   api.nvim_create_autocmd("ModeChanged", {
@@ -1472,7 +1427,7 @@ function Sidebar:create_floating_window_for_split(opts)
 end
 
 function Sidebar:render()
-  local chat_history = load_chat_history(self)
+  local chat_history = History.load(self.code.bufnr)
 
   local sidebar_height = api.nvim_win_get_height(self.code.winid)
   local selected_code_size = self:get_selected_code_size()
