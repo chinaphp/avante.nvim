@@ -72,6 +72,7 @@ local Dressing = require("avante.ui.dressing")
 ---@field model? string
 ---@field parse_api_key fun(): string | nil
 ---@field parse_stream_data? AvanteStreamParser
+---@field on_error? fun(result: table): nil
 ---
 ---@class avante.Providers
 ---@field openai AvanteProviderFunctor
@@ -150,7 +151,6 @@ E.setup = function(opts)
   local function mount_dressing_buffer()
     vim.defer_fn(function()
       -- only mount if given buffer is not of buftype ministarter, dashboard, alpha, qf
-      local exclude_buftypes = { "qf", "nofile" }
       local exclude_filetypes = {
         "NvimTree",
         "Outline",
@@ -163,12 +163,9 @@ E.setup = function(opts)
         "gitcommit",
         "gitrebase",
         "DressingInput",
+        "noice",
       }
-      if
-        not vim.tbl_contains(exclude_buftypes, vim.bo.buftype)
-        and not vim.tbl_contains(exclude_filetypes, vim.bo.filetype)
-        and not opts.provider.has()
-      then
+      if not vim.tbl_contains(exclude_filetypes, vim.bo.filetype) and not opts.provider.has() then
         Dressing.initialize_input_buffer({
           opts = { prompt = "Enter " .. var .. ": " },
           on_confirm = on_confirm,
@@ -232,6 +229,8 @@ M = setmetatable(M, {
       end
     end
 
+    t[k].setup()
+
     return t[k]
   end,
 })
@@ -240,9 +239,7 @@ M.setup = function()
   ---@type AvanteProviderFunctor
   local provider = M[Config.provider]
   E.setup({ provider = provider })
-  vim.schedule(function()
-    provider.setup()
-  end)
+  provider.setup()
 
   M.commands()
 end
@@ -254,6 +251,7 @@ function M.refresh(provider)
 
   ---@type AvanteProviderFunctor
   local p = M[Config.provider]
+  p.setup()
   if not p.has() then
     E.setup({ provider = p, refresh = true })
   else
