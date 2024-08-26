@@ -106,7 +106,7 @@ function Sidebar:close()
       comp:unmount()
     end
   end
-  if self.code ~= nil and api.nvim_win_is_valid(self.code.winid) then
+  if self.code and self.code.winid and api.nvim_win_is_valid(self.code.winid) then
     fn.win_gotoid(self.code.winid)
   end
 
@@ -589,7 +589,7 @@ function Sidebar:on_mount()
   api.nvim_create_autocmd("User", {
     pattern = VIEW_BUFFER_UPDATED_PATTERN,
     callback = function()
-      if self.result == nil then
+      if not self.result or not self.result.bufnr or not api.nvim_buf_is_valid(self.result.bufnr) then
         return
       end
       codeblocks = parse_codeblocks(self.result.bufnr)
@@ -775,8 +775,9 @@ function Sidebar:refresh_winids()
     else
       current_idx = current_idx + 1
     end
-    if api.nvim_win_is_valid(winids[current_idx]) then
-      api.nvim_set_current_win(winids[current_idx])
+    local winid = winids[current_idx]
+    if winid and api.nvim_win_is_valid(winid) then
+      api.nvim_set_current_win(winid)
     end
   end
 
@@ -788,8 +789,9 @@ function Sidebar:refresh_winids()
     else
       current_idx = current_idx - 1
     end
-    if api.nvim_win_is_valid(winids[current_idx]) then
-      api.nvim_set_current_win(winids[current_idx])
+    local winid = winids[current_idx]
+    if winid and api.nvim_win_is_valid(winid) then
+      api.nvim_set_current_win(winid)
     end
   end
 
@@ -1265,6 +1267,9 @@ function Sidebar:create_input()
   end)
 
   local function on_submit()
+    if not self.input or not self.input.bufnr or not api.nvim_buf_is_valid(self.input.bufnr) then
+      return
+    end
     local lines = api.nvim_buf_get_lines(self.input.bufnr, 0, -1, false)
     local request = table.concat(lines, "\n")
     if request == "" then
@@ -1274,10 +1279,10 @@ function Sidebar:create_input()
     handle_submit(request)
   end
 
+  self.input:mount()
+
   self.input:map("n", Config.mappings.submit.normal, on_submit)
   self.input:map("i", Config.mappings.submit.insert, on_submit)
-
-  self.input:mount()
 
   api.nvim_set_option_value("filetype", "AvanteInput", { buf = self.input.bufnr })
 
@@ -1458,6 +1463,8 @@ function Sidebar:render()
     },
   })
 
+  self.result:mount()
+
   self.result:on(event.BufWinEnter, function()
     xpcall(function()
       api.nvim_buf_set_name(self.result.bufnr, RESULT_BUF_NAME)
@@ -1473,8 +1480,6 @@ function Sidebar:render()
     api.nvim_exec_autocmds("User", { pattern = Llm.CANCEL_PATTERN })
     self:close()
   end)
-
-  self.result:mount()
 
   self.input_container = Split({
     enter = false,

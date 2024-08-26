@@ -91,7 +91,12 @@ function FloatingWindow.from_split_win(split_winid, opts)
     api.nvim_create_autocmd("WinResized", {
       group = floating_win.augroup,
       callback = function()
-        if not api.nvim_win_is_valid(split_winid) or not api.nvim_win_is_valid(winid) then
+        if
+          not split_winid
+          or not winid
+          or not api.nvim_win_is_valid(split_winid)
+          or not api.nvim_win_is_valid(winid)
+        then
           return
         end
 
@@ -113,7 +118,12 @@ function FloatingWindow.from_split_win(split_winid, opts)
     api.nvim_create_autocmd("WinResized", {
       group = floating_win.augroup,
       callback = function()
-        if not api.nvim_win_is_valid(split_winid) or not api.nvim_win_is_valid(winid) then
+        if
+          not split_winid
+          or not winid
+          or not api.nvim_win_is_valid(split_winid)
+          or not api.nvim_win_is_valid(winid)
+        then
           return
         end
 
@@ -227,18 +237,21 @@ function FloatingWindow:on(event, handler, options)
 end
 
 ---@param mode string|string[] check `:h :map-modes`
----@param key string|string[] key for the mapping
----@param handler string | fun(): nil handler for the mapping
----@param opts? table<"'expr'"|"'noremap'"|"'nowait'"|"'remap'"|"'script'"|"'silent'"|"'unique'", boolean>
+---@param lhs string|string[]
+---@param handler string|fun(): nil handler for the mapping
+---@param opts? vim.keymap.set.Opts
 ---@return nil
-function FloatingWindow:map(mode, key, handler, opts)
-  local options = opts or {}
-  if type(key) == "string" then
-    vim.keymap.set(mode, key, handler, options)
-    return
+function FloatingWindow:map(mode, lhs, handler, opts)
+  if not self.bufnr then
+    error("floating buffer not found.")
   end
-  for _, key_ in ipairs(key) do
-    vim.keymap.set(mode, key_, handler, options)
+  local options = vim.deepcopy(opts or {})
+  options.buffer = self.bufnr
+  if type(lhs) ~= "table" then
+    lhs = { lhs }
+  end
+  for _, lhs_ in ipairs(lhs) do
+    vim.keymap.set(mode, lhs_, handler, options)
   end
 end
 

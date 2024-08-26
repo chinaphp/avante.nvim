@@ -62,7 +62,7 @@ For Windows users, change the build command to the following:
 > [!IMPORTANT]
 >
 > If your neovim doesn't use LuaJIT, then change `build` to `make lua51`. By default running make will install luajit.
-> For ARM-based setup, make sure to also install cargo as we will have to build the tiktoken_core from source.
+> Avante.nvim will now requires cargo to build tiktoken_core from source.
 
 > [!NOTE]
 >
@@ -121,6 +121,14 @@ _See [config.lua#L9](./lua/avante/config.lua) for the full config_
     jump = {
       next = "]]",
       prev = "[[",
+    },
+    submit = {
+      normal = "<CR>",
+      insert = "<C-s>",
+    },
+    toggle = {
+      debug = "<leader>ad",
+      hint = "<leader>ah",
     },
   },
   hints = { enabled = true },
@@ -201,12 +209,6 @@ The following key bindings are available for use with `avante.nvim`:
 - <kbd>]</kbd><kbd>x</kbd> — move to previous conflict
 - <kbd>[</kbd><kbd>x</kbd> — move to next conflict
 
-## Roadmap
-
-- **Enhanced AI Interactions**: Improve the depth of AI analysis and recommendations for more complex coding scenarios.
-- **Stability Improvements**: Refactor and optimize the codebase to enhance the stability and reliability of the plugin.
-- **Expanded Features**: Introduce additional customization options and new features to support a wider range of coding tasks.
-
 ## Highlight Groups
 
 | Highlight Group | Description |
@@ -228,6 +230,11 @@ The following key bindings are available for use with `avante.nvim`:
 - [ ] Smart Tab (Cursor Flow)
 - [ ] Chat with project
 - [ ] Chat with selected files
+
+## Roadmap
+
+- **Enhanced AI Interactions**: Improve the depth of AI analysis and recommendations for more complex coding scenarios.
+- **LSP + Tree-sitter + LLM Integration**: Integrate with LSP and Tree-sitter and LLM to provide more accurate and powerful code suggestions and analysis.
 
 ## Contributing
 
